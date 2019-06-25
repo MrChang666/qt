@@ -1,0 +1,34 @@
+logPath: .\logs\qt.log
+logLevel: debug
+baseUrl: "https://api.fcoin.com/v2"
+assKey: ""
+secretKey: ""
+
+symbols:
+  -
+    balance: "50"
+    assetPrecision: "4"
+    pricePrecison: "4"
+    symbol: "paxusdt"
+    minBalance: "1"
+    minAsset: "1"
+    # level 1-15
+    buyLevel: "5"
+    sellLevle: "5"
+    period: "2"
+    #1单边交易 2 双边交易
+    bySide: "2"
+  -
+    balance: "50"
+    assetPrecision: "4"
+    pricePrecison: "3"
+    symbol: "eosusdt"
+    #最小可用余额
+    minBalance: "0.01"
+    #最小可用资产
+    minAsset: "0.01"
+    # level 1-15
+    buyLevel: "12"
+    sellLevle: "12"
+    period: "2"
+    bySide: "1"
