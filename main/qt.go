@@ -4,13 +4,15 @@ import (
 	"github.com/MrChang666/fcoin-api-go/client"
 	"github.com/MrChang666/qt/config"
 	"github.com/MrChang666/qt/service"
+	"github.com/jinzhu/gorm"
+	_ "github.com/jinzhu/gorm/dialects/mysql"
 	"github.com/natefinch/lumberjack"
 	"github.com/shopspring/decimal"
 	log "github.com/sirupsen/logrus"
-	"strconv"
 
 	"io"
 	"os"
+	"strconv"
 )
 
 func initLog(logPath, logLevel string) {
@@ -52,6 +54,13 @@ func main() {
 	initLog(cfg.LogPath, cfg.LogLevel)
 	fcClient := client.NewFCoinClient(cfg.SecretKey, cfg.AssKey, cfg.BaseUrl)
 
+	dbSource, err := gorm.Open("mysql", cfg.Dsn)
+	if err != nil {
+		panic(err)
+	}
+	log.Debug("db inited")
+	defer dbSource.Close()
+
 	start := make(chan int)
 
 	for _, s := range cfg.Symbols {
@@ -62,14 +71,15 @@ func main() {
 		assetPrecision, _ := strconv.Atoi(s["assetPrecision"])
 		pricePrecison, _ := strconv.Atoi(s["pricePrecison"])
 
-		buyLevel, _ := strconv.Atoi(s["buyLevel"])
-		sellLevel, _ := strconv.Atoi(s["sellLevle"])
 		period, _ := strconv.Atoi(s["period"])
 
 		bySide := s["bySide"]
+		diffBuyRate, _ := decimal.NewFromString(s["diffBuyRate"])
+		diffSellRate, _ := decimal.NewFromString(s["diffSellRate"])
 
-		ds := service.NewDigService(symbol, balance, minBalance, minAsset, int32(assetPrecision), int32(pricePrecison), fcClient, buyLevel, sellLevel, period, bySide)
+		ds := service.NewDigService(symbol, balance, minBalance, minAsset, diffBuyRate, diffSellRate, int32(assetPrecision), int32(pricePrecison), fcClient, period, bySide, dbSource)
 		go ds.Run()
+		go ds.SaveOrder()
 	}
 
 	<-start

@@ -3,6 +3,8 @@ package service
 import (
 	"fmt"
 	"github.com/MrChang666/fcoin-api-go/client"
+	"github.com/MrChang666/qt/model"
+	"github.com/jinzhu/gorm"
 	"github.com/shopspring/decimal"
 	log "github.com/sirupsen/logrus"
 	"strings"
@@ -24,13 +26,15 @@ type DigService struct {
 	sellOrderResult *client.OrderResult
 	minBalance      decimal.Decimal
 	minAsset        decimal.Decimal
-	buyLevel        int
-	sellLevel       int
 	period          int
 	bySide          string
+	orderChan       chan string
+	db              *gorm.DB
+	diffBuyRate     decimal.Decimal
+	diffSellRate    decimal.Decimal
 }
 
-func NewDigService(symbol string, balance, minBalance, minAsset decimal.Decimal, assetPrecision, pricepPrecision int32, fcClient *client.FCoinClient, sellLevel, buyLevel, period int, bySide string) *DigService {
+func NewDigService(symbol string, balance, minBalance, minAsset, diffBuyRate, diffSellRate decimal.Decimal, assetPrecision, pricepPrecision int32, fcClient *client.FCoinClient, period int, bySide string, db *gorm.DB) *DigService {
 	ds := &DigService{
 		symbol:          symbol,
 		balance:         balance,
@@ -39,10 +43,12 @@ func NewDigService(symbol string, balance, minBalance, minAsset decimal.Decimal,
 		fcClient:        fcClient,
 		minBalance:      minBalance,
 		minAsset:        minAsset,
-		buyLevel:        buyLevel,
-		sellLevel:       sellLevel,
 		period:          period,
 		bySide:          bySide,
+		orderChan:       make(chan string, 256),
+		db:              db,
+		diffBuyRate:     diffBuyRate,
+		diffSellRate:    diffSellRate,
 	}
 	return ds
 }
@@ -58,25 +64,27 @@ func (ds *DigService) Run() {
 
 		ds.cancelBuyOrder()
 		ds.cancelSellOrder()
-		depth, err := ds.fcClient.GetDepth(ds.symbol, "L20")
-		if err != nil {
-			log.Error(err)
+
+		ticker, err := ds.fcClient.GetLatestTickerBySymbol(ds.symbol)
+		if len(ticker.Data.Ticker) == 0 {
+			log.Error("ticker info is nil")
 			continue
 		}
 
-		if depth == nil || len(depth.Data.Asks) < 30 || len(depth.Data.Bids) < 30 {
-			log.Error("depth data is not enough")
-			return
+		curPrice := decimal.NewFromFloat(ticker.Data.Ticker[0])
+		if curPrice.LessThanOrEqual(decimal.Zero) {
+			log.Error("curprice is zero")
+			continue
 		}
-
 		//创建卖单
-		err = ds.createSellOrder(depth)
+		err = ds.createSellOrder(curPrice)
 		if err != nil {
 			log.Errorf("create buy order failed,%v", err)
+			continue
 		}
 
 		//创建买单
-		err = ds.createBuyOrder(depth)
+		err = ds.createBuyOrder(curPrice)
 		if err != nil {
 			log.Errorf("create buy order failed,%v", err)
 		}
@@ -85,10 +93,7 @@ func (ds *DigService) Run() {
 	}
 }
 
-/**
-1、创建6-15之间的买单 12
-*/
-func (ds *DigService) createBuyOrder(depth *client.Depth) error {
+func (ds *DigService) createBuyOrder(curPrice decimal.Decimal) error {
 
 	if ds.buyOrderResult != nil {
 		return nil
@@ -119,8 +124,10 @@ func (ds *DigService) createBuyOrder(depth *client.Depth) error {
 	}
 
 	log.Debugf("%s,begin to create buy order", ds.symbol)
-	buyPrice := decimal.NewFromFloat(depth.Data.Bids[(ds.buyLevel-1)*2])
 
+	one := decimal.New(1, 0)
+
+	buyPrice := curPrice.Mul(one.Sub(ds.diffBuyRate))
 	p := decimal.New(1, ds.assetPrecision)
 
 	assetAmt := available.Div(buyPrice)
@@ -149,7 +156,7 @@ func (ds *DigService) createBuyOrder(depth *client.Depth) error {
 	return err
 }
 
-func (ds *DigService) createSellOrder(depth *client.Depth) error {
+func (ds *DigService) createSellOrder(curPrice decimal.Decimal) error {
 
 	if ds.sellOrderResult != nil {
 		return nil
@@ -171,11 +178,17 @@ func (ds *DigService) createSellOrder(depth *client.Depth) error {
 	}
 
 	log.Debugf("%s,begin to create sell order", ds.symbol)
-	sellPrice := decimal.NewFromFloat(depth.Data.Asks[(ds.sellLevel-1)*2])
+
+	one := decimal.New(1, 0)
+	sellPrice := curPrice.Mul(one.Add(ds.diffSellRate))
+
+	assetAmt := ds.balance.Div(sellPrice)
+
+	if assetAmt.GreaterThan(available) {
+		assetAmt = available
+	}
 
 	p := decimal.New(1, ds.assetPrecision)
-
-	assetAmt := available
 	assetAmt = assetAmt.Mul(p).Floor().Div(p)
 	//构建订单
 	newOrder := &client.NewOrder{
@@ -186,6 +199,7 @@ func (ds *DigService) createSellOrder(depth *client.Depth) error {
 		Symbol:    ds.symbol,
 		Price:     sellPrice.String(),
 	}
+
 	res, err := ds.fcClient.CreateOrder(newOrder)
 	if err != nil {
 		return err
@@ -215,13 +229,9 @@ func (ds *DigService) cancelBuyOrder() {
 		ds.buyOrderResult = nil
 	} else if res.Status == client.CANCEL_SUCCESS_ORDER {
 		//记录成交的情况
-		orderInfo, err := ds.fcClient.GetOrderById(ds.buyOrderResult.Data)
-
-		if err != nil {
-			log.Errorf("get order info failed,%v", err)
+		select {
+		case ds.orderChan <- ds.buyOrderResult.Data:
 		}
-
-		log.Infof("side:%s,symbol:%s,price:%s,amount:%s", orderInfo.Data.Side, orderInfo.Data.Symbol, orderInfo.Data.Price, orderInfo.Data.Amount)
 
 		ds.buyOrderResult = nil
 	} else { //都是非正常情况
@@ -245,13 +255,9 @@ func (ds *DigService) cancelSellOrder() {
 		ds.sellOrderResult = nil
 	} else if res.Status == client.CANCEL_SUCCESS_ORDER {
 		//记录成交的情况
-		orderInfo, err := ds.fcClient.GetOrderById(ds.sellOrderResult.Data)
-
-		if err != nil {
-			log.Errorf("get sell order info failed,%v", err)
+		select {
+		case ds.orderChan <- ds.sellOrderResult.Data:
 		}
-
-		log.Infof("side:%s,symbol:%s,price:%s,amount:%s", orderInfo.Data.Side, orderInfo.Data.Symbol, orderInfo.Data.Price, orderInfo.Data.Amount)
 
 		ds.sellOrderResult = nil
 	} else { //都是非正常情况
@@ -263,21 +269,52 @@ func (ds *DigService) cancelSellOrder() {
 //btcusdt  btcpax btctusd
 
 func getUSDT(symbol string) string {
+	var usdt string
 	if strings.HasSuffix(symbol, USDT) {
-		return USDT
+		usdt = USDT
+	} else if strings.HasSuffix(symbol, PAX) {
+		usdt = PAX
 	}
-	if strings.HasSuffix(symbol, PAX) {
-		return PAX
-	}
-	return ""
+	return usdt
 }
 
 func getCurrency(symbol string) string {
+	var cur string
 	if strings.HasSuffix(symbol, USDT) {
-		return strings.TrimSuffix(symbol, USDT)
+		cur = strings.TrimSuffix(symbol, USDT)
+	} else if strings.HasSuffix(symbol, PAX) {
+		cur = strings.TrimSuffix(symbol, PAX)
 	}
-	if strings.HasSuffix(symbol, PAX) {
-		return strings.TrimSuffix(symbol, PAX)
+	return cur
+}
+
+func (ds *DigService) SaveOrder() {
+	for {
+		select {
+		case orderId := <-ds.orderChan:
+			orderInfo, err := ds.fcClient.GetOrderById(orderId)
+			if err != nil {
+				log.Errorf("check success order failed.%v", err)
+			}
+			amount, _ := decimal.NewFromString(orderInfo.Data.Amount)
+			price, _ := decimal.NewFromString(orderInfo.Data.Price)
+			moi := &model.OrderInfo{
+				Amount:    amount,
+				OrderId:   orderId,
+				OrderType: orderInfo.Data.Type,
+				Price:     price,
+				State:     orderInfo.Data.State,
+				Symbol:    orderInfo.Data.Symbol,
+				Side:      orderInfo.Data.Side,
+			}
+
+			err = moi.Create(ds.db)
+			if err != nil {
+				log.Errorf("save order %s failed,%v", orderId, err)
+			}
+
+			log.Debugf("save order,%s", moi)
+		}
+		time.Sleep(time.Second * 5)
 	}
-	return ""
 }

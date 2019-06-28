@@ -12,6 +12,7 @@ type Config struct {
 	AssKey    string
 	SecretKey string
 	Symbols   []map[string]string
+	Dsn       string
 }
 
 func InitConfig(cfgName, cfgPath string) *Config {
@@ -41,6 +42,7 @@ func InitConfig(cfgName, cfgPath string) *Config {
 		AssKey:    viper.GetString("assKey"),
 		SecretKey: viper.GetString("secretKey"),
 		Symbols:   ss,
+		Dsn:       viper.GetString("dsn"),
 	}
 
 	return cfg

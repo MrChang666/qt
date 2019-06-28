@@ -15,6 +15,12 @@
 			"revisionTime": "2019-03-12T18:14:46Z"
 		},
 		{
+			"checksumSHA1": "3uQf4xaIQyYxKXODS1v0E7X0Rz8=",
+			"path": "github.com/go-sql-driver/mysql",
+			"revision": "578c4c8066964679ef44f45de2b6c7e811cc665e",
+			"revisionTime": "2019-04-10T03:04:54Z"
+		},
+		{
 			"checksumSHA1": "C0MwL6ShVhJK9hCTvCfH143twkU=",
 			"path": "github.com/hashicorp/hcl",
 			"revision": "cf7d376da96d9cecec7c7483cec2735efe54a410",
@@ -73,6 +79,24 @@
 			"path": "github.com/hashicorp/hcl/json/token",
 			"revision": "cf7d376da96d9cecec7c7483cec2735efe54a410",
 			"revisionTime": "2019-06-11T12:32:18Z"
+		},
+		{
+			"checksumSHA1": "BVLcEDQelqXp6x9u4mbrxE7rxKs=",
+			"path": "github.com/jinzhu/gorm",
+			"revision": "472c70caa40267cb89fd8facb07fe6454b578626",
+			"revisionTime": "2018-11-03T14:14:39Z"
+		},
+		{
+			"checksumSHA1": "eECxSkwh0WmhLwaxHfkvcLOWS08=",
+			"path": "github.com/jinzhu/gorm/dialects/mysql",
+			"revision": "472c70caa40267cb89fd8facb07fe6454b578626",
+			"revisionTime": "2018-11-03T14:14:39Z"
+		},
+		{
+			"checksumSHA1": "4eelJOSLZoDzLuaJvgilOBVNovU=",
+			"path": "github.com/jinzhu/inflection",
+			"revision": "04140366298a54a039076d798123ffa108fff46c",
+			"revisionTime": "2018-03-08T03:36:59Z"
 		},
 		{
 			"checksumSHA1": "WQTi/XNmYeD6uGrXtaqJ3ibW0wU=",
@@ -175,6 +199,12 @@
 			"path": "golang.org/x/text/unicode/norm",
 			"revision": "342b2e1fbaa52c93f31447ad2c6abc048c63e475",
 			"revisionTime": "2018-12-15T17:52:45Z"
+		},
+		{
+			"checksumSHA1": "LiyXfqOzaeQ8vgYZH3t2hUEdVTw=",
+			"path": "google.golang.org/appengine/cloudsql",
+			"revision": "4a4468ece617fc8205e99368fa2200e9d1fad421",
+			"revisionTime": "2018-10-31T00:20:03Z"
 		},
 		{
 			"checksumSHA1": "oNqPrS2edE8peI3ah2INe379k8E=",
