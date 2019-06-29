@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-type DigService struct {
+type MarketService struct {
 	symbol          string          //交易对，如btcusdt
 	balance         decimal.Decimal //允许使用的金额，比如100
 	assetPrecision  int32
@@ -21,63 +21,59 @@ type DigService struct {
 	sellOrderResult *client.OrderResult
 	minBalance      decimal.Decimal
 	minAsset        decimal.Decimal
-	buyLevel        int
-	sellLevel       int
 	period          int
 	bySide          string
 	orderChan       chan string
 	db              *gorm.DB
+	diffBuyRate     decimal.Decimal
+	diffSellRate    decimal.Decimal
 }
 
-func NewDigService(symbol string, balance, minBalance, minAsset decimal.Decimal, assetPrecision, pricepPrecision int32, fcClient *client.FCoinClient, sellLevel, buyLevel, period int, bySide string, db *gorm.DB) *DigService {
-	ds := &DigService{
+func NewMarketService(symbol string, balance, minBalance, minAsset, diffBuyRate, diffSellRate decimal.Decimal, assetPrecision, pricePrecision int32, fcClient *client.FCoinClient, period int, bySide string, db *gorm.DB) *MarketService {
+	mt := &MarketService{
 		symbol:         symbol,
 		balance:        balance,
 		assetPrecision: assetPrecision,
-		pricePrecision: pricepPrecision,
+		pricePrecision: pricePrecision,
 		fcClient:       fcClient,
 		minBalance:     minBalance,
 		minAsset:       minAsset,
-		buyLevel:       buyLevel,
-		sellLevel:      sellLevel,
 		period:         period,
 		bySide:         bySide,
-		orderChan:      make(chan string, 128),
+		orderChan:      make(chan string, 256),
 		db:             db,
+		diffBuyRate:    diffBuyRate,
+		diffSellRate:   diffSellRate,
 	}
-	return ds
+	return mt
 }
 
-func handlePanic() {
-	if err := recover(); err != nil {
-		log.Error("panic err:", err)
-	}
-}
-
-func (ds *DigService) Run() {
+func (ds *MarketService) Run() {
 	for {
 
 		ds.cancelBuyOrder()
 		ds.cancelSellOrder()
-		depth, err := ds.fcClient.GetDepth(ds.symbol, "L20")
-		if err != nil {
-			log.Error(err)
+
+		ticker, err := ds.fcClient.GetLatestTickerBySymbol(ds.symbol)
+		if len(ticker.Data.Ticker) == 0 {
+			log.Error("ticker info is nil")
 			continue
 		}
 
-		if depth == nil || len(depth.Data.Asks) < 30 || len(depth.Data.Bids) < 30 {
-			log.Error("depth data is not enough")
-			return
+		curPrice := decimal.NewFromFloat(ticker.Data.Ticker[0])
+		if curPrice.LessThanOrEqual(decimal.Zero) {
+			log.Error("curprice is zero")
+			continue
 		}
 		//创建卖单
-		err = ds.createSellOrder(depth)
+		err = ds.createSellOrder(curPrice)
 		if err != nil {
 			log.Errorf("create buy order failed,%v", err)
 			continue
 		}
 
 		//创建买单
-		err = ds.createBuyOrder(depth)
+		err = ds.createBuyOrder(curPrice)
 		if err != nil {
 			log.Errorf("create buy order failed,%v", err)
 		}
@@ -86,10 +82,7 @@ func (ds *DigService) Run() {
 	}
 }
 
-/**
-1、创建6-15之间的买单 12
-*/
-func (ds *DigService) createBuyOrder(depth *client.Depth) error {
+func (ds *MarketService) createBuyOrder(curPrice decimal.Decimal) error {
 
 	if ds.buyOrderResult != nil {
 		return nil
@@ -119,9 +112,9 @@ func (ds *DigService) createBuyOrder(depth *client.Depth) error {
 		available = ds.balance
 	}
 
-	log.Debugf("%s,begin to create buy order", ds.symbol)
-	buyPrice := decimal.NewFromFloat(depth.Data.Bids[(ds.buyLevel-1)*2])
+	one := decimal.New(1, 0)
 
+	buyPrice := curPrice.Mul(one.Sub(ds.diffBuyRate)).Round(ds.pricePrecision)
 	p := decimal.New(1, ds.assetPrecision)
 
 	assetAmt := available.Div(buyPrice)
@@ -152,7 +145,7 @@ func (ds *DigService) createBuyOrder(depth *client.Depth) error {
 	return err
 }
 
-func (ds *DigService) createSellOrder(depth *client.Depth) error {
+func (ds *MarketService) createSellOrder(curPrice decimal.Decimal) error {
 
 	if ds.sellOrderResult != nil {
 		return nil
@@ -173,12 +166,16 @@ func (ds *DigService) createSellOrder(depth *client.Depth) error {
 		return nil
 	}
 
-	log.Debugf("%s,begin to create sell order", ds.symbol)
-	sellPrice := decimal.NewFromFloat(depth.Data.Asks[(ds.sellLevel-1)*2])
+	one := decimal.New(1, 0)
+	sellPrice := curPrice.Mul(one.Add(ds.diffSellRate)).Round(ds.pricePrecision)
+
+	assetAmt := ds.balance.Div(sellPrice)
+
+	if assetAmt.GreaterThan(available) {
+		assetAmt = available
+	}
 
 	p := decimal.New(1, ds.assetPrecision)
-
-	assetAmt := available
 	assetAmt = assetAmt.Mul(p).Floor().Div(p)
 	//构建订单
 	newOrder := &client.NewOrder{
@@ -189,6 +186,7 @@ func (ds *DigService) createSellOrder(depth *client.Depth) error {
 		Symbol:    ds.symbol,
 		Price:     sellPrice.String(),
 	}
+
 	res, err := ds.fcClient.CreateOrder(newOrder)
 	if err != nil {
 		return err
@@ -199,12 +197,14 @@ func (ds *DigService) createSellOrder(depth *client.Depth) error {
 		return err
 	}
 
+	log.Debugf("%s,created sell order,price:%s,amount:%s", ds.symbol, newOrder.Price, newOrder.Amount)
+
 	ds.sellOrderResult = res
 	defer handlePanic()
 	return err
 }
 
-func (ds *DigService) cancelBuyOrder() {
+func (ds *MarketService) cancelBuyOrder() {
 	if ds.buyOrderResult == nil {
 		return
 	}
@@ -230,7 +230,7 @@ func (ds *DigService) cancelBuyOrder() {
 	defer handlePanic()
 }
 
-func (ds *DigService) cancelSellOrder() {
+func (ds *MarketService) cancelSellOrder() {
 	if ds.sellOrderResult == nil {
 		return
 	}
@@ -255,9 +255,7 @@ func (ds *DigService) cancelSellOrder() {
 	defer handlePanic()
 }
 
-//btcusdt  btcpax btctusd
-
-func (ds *DigService) SaveOrder() {
+func (ds *MarketService) SaveOrder() {
 	for {
 		select {
 		case orderId := <-ds.orderChan:

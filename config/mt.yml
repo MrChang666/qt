@@ -3,20 +3,18 @@ logLevel: debug
 baseUrl: "https://api.fcoin.com/v2"
 assKey: ""
 secretKey: ""
-dsn: ""
+dsn:
 symbols:
   -
     balance: "100"
     assetPrecision: "4"
-    pricePrecision: "4"
-    symbol: "paxusdt"
-    minBalance: "1"
-    minAsset: "1"
+    pricePrecision: "1"
+    symbol: "btcusdt"
+    minBalance: "10"
+    minAsset: "0.001"
     period: "3"
     #1单边交易 2 双边交易
     bySide: "2"
-    #1-15 排序挖矿的范围
-    buyLevel: "5"
-    #挂单的范围 1-20
-    sellLevel: "5"
+    diffBuyRate: "0.0007"
+    diffSellRate: "0.0017"
 

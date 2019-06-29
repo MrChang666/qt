@@ -48,7 +48,7 @@ func initLog(logPath, logLevel string) {
 }
 
 func main() {
-	cfg := config.InitConfig("qt", "./config")
+	cfg := config.InitConfig("mt", "./config")
 	initLog(cfg.LogPath, cfg.LogLevel)
 	fcClient := client.NewFCoinClient(cfg.SecretKey, cfg.AssKey, cfg.BaseUrl)
 
@@ -69,15 +69,15 @@ func main() {
 		assetPrecision, _ := strconv.Atoi(s["assetPrecision"])
 		pricePrecision, _ := strconv.Atoi(s["pricePrecision"])
 
-		buyLevel, _ := strconv.Atoi(s["buyLevel"])
-		sellLevel, _ := strconv.Atoi(s["sellLevel"])
 		period, _ := strconv.Atoi(s["period"])
 
 		bySide := s["bySide"]
+		diffBuyRate, _ := decimal.NewFromString(s["diffBuyRate"])
+		diffSellRate, _ := decimal.NewFromString(s["diffSellRate"])
 
-		ds := service.NewDigService(symbol, balance, minBalance, minAsset, int32(assetPrecision), int32(pricePrecision), fcClient, buyLevel, sellLevel, period, bySide, dbSource)
-		go ds.Run()
-		go ds.SaveOrder()
+		mt := service.NewMarketService(symbol, balance, minBalance, minAsset, diffBuyRate, diffSellRate, int32(assetPrecision), int32(pricePrecision), fcClient, period, bySide, dbSource)
+		go mt.Run()
+		go mt.SaveOrder()
 	}
 
 	<-start
