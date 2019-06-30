@@ -57,8 +57,20 @@ func handlePanic() {
 func (ds *DigService) Run() {
 	for {
 
-		ds.cancelBuyOrder()
-		ds.cancelSellOrder()
+		err := ds.cancelBuyOrder()
+		if err != nil {
+			log.Error(err)
+		}
+
+		time.Sleep(time.Millisecond * 101)
+
+		err = ds.cancelSellOrder()
+		if err != nil {
+			log.Error(err)
+			continue
+		}
+		time.Sleep(time.Millisecond * 101)
+
 		depth, err := ds.fcClient.GetDepth(ds.symbol, "L20")
 		if err != nil {
 			log.Error(err)
@@ -69,6 +81,8 @@ func (ds *DigService) Run() {
 			log.Error("depth data is not enough")
 			return
 		}
+
+		time.Sleep(time.Millisecond * 101)
 		//创建卖单
 		err = ds.createSellOrder(depth)
 		if err != nil {
@@ -76,6 +90,7 @@ func (ds *DigService) Run() {
 			continue
 		}
 
+		time.Sleep(time.Millisecond * 101)
 		//创建买单
 		err = ds.createBuyOrder(depth)
 		if err != nil {
@@ -204,15 +219,14 @@ func (ds *DigService) createSellOrder(depth *client.Depth) error {
 	return err
 }
 
-func (ds *DigService) cancelBuyOrder() {
+func (ds *DigService) cancelBuyOrder() error {
 	if ds.buyOrderResult == nil {
-		return
+		return nil
 	}
 	log.Debug("begin to cancel buy order")
 	res, err := ds.fcClient.CancelOrder(ds.buyOrderResult.Data)
 	if err != nil {
-		log.Errorf("cancel buy order failed,%v", err)
-		return
+		return fmt.Errorf("cancel buy order failed,%v", err)
 	}
 	if res.Status == client.ORDER_STATES_SUCCESS {
 		ds.buyOrderResult = nil
@@ -224,21 +238,21 @@ func (ds *DigService) cancelBuyOrder() {
 
 		ds.buyOrderResult = nil
 	} else { //都是非正常情况
-		log.Errorf("cancel buy order error,%v", res)
+		return fmt.Errorf("cancel buy order error,%v", res)
 	}
 
 	defer handlePanic()
+	return nil
 }
 
-func (ds *DigService) cancelSellOrder() {
+func (ds *DigService) cancelSellOrder() error {
 	if ds.sellOrderResult == nil {
-		return
+		return nil
 	}
 	log.Debug("begin to cancel sell order")
 	res, err := ds.fcClient.CancelOrder(ds.sellOrderResult.Data)
 	if err != nil {
-		log.Errorf("cancel sell order failed,%v", err)
-		return
+		return fmt.Errorf("cancel sell order failed,%v", err)
 	}
 	if res.Status == client.ORDER_STATES_SUCCESS {
 		ds.sellOrderResult = nil
@@ -250,9 +264,10 @@ func (ds *DigService) cancelSellOrder() {
 
 		ds.sellOrderResult = nil
 	} else { //都是非正常情况
-		log.Errorf("cancel sell order error,%v", res)
+		return fmt.Errorf("cancel sell order error,%v", res)
 	}
 	defer handlePanic()
+	return nil
 }
 
 //btcusdt  btcpax btctusd
