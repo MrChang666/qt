@@ -71,7 +71,7 @@ func (ds *DigService) Run() {
 		}
 		time.Sleep(time.Millisecond * 101)
 
-		depth, err := ds.fcClient.GetDepth(ds.symbol, "L20")
+		depth, err := ds.fcClient.GetDepth(ds.symbol, "L150")
 		if err != nil {
 			log.Error(err)
 			continue
