@@ -29,7 +29,7 @@ type DigService struct {
 	db              *gorm.DB
 }
 
-func NewDigService(symbol string, balance, minBalance, minAsset decimal.Decimal, assetPrecision, pricepPrecision int32, fcClient *client.FCoinClient, sellLevel, buyLevel, period int, bySide string, db *gorm.DB) *DigService {
+func NewDigService(symbol string, balance, minBalance, minAsset decimal.Decimal, assetPrecision, pricepPrecision int32, fcClient *client.FCoinClient, buyLevel, sellLevel, period int, bySide string, db *gorm.DB) *DigService {
 	ds := &DigService{
 		symbol:         symbol,
 		balance:        balance,
@@ -71,7 +71,7 @@ func (ds *DigService) Run() {
 		}
 		time.Sleep(time.Millisecond * 101)
 
-		depth, err := ds.fcClient.GetDepth(ds.symbol, "L150")
+		depth, err := ds.fcClient.GetDepth(ds.symbol, "L20")
 		if err != nil {
 			log.Error(err)
 			continue
@@ -102,8 +102,7 @@ func (ds *DigService) Run() {
 }
 
 /**
-1、创建6-15之间的买单 12
-*/
+ */
 func (ds *DigService) createBuyOrder(depth *client.Depth) error {
 
 	if ds.buyOrderResult != nil {
