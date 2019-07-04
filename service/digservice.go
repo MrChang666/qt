@@ -1,7 +1,9 @@
 package service
 
 import (
+	"encoding/json"
 	"fmt"
+	"github.com/FCoinCommunity/fcoin-go-sdk/fcoin"
 	"github.com/MrChang666/fcoin-api-go/client"
 	"github.com/MrChang666/qt/model"
 	"github.com/MrChang666/qt/util"
@@ -27,9 +29,18 @@ type DigService struct {
 	bySide          string
 	orderChan       chan string
 	db              *gorm.DB
+	depthType       string
 }
 
-func NewDigService(symbol string, balance, minBalance, minAsset decimal.Decimal, assetPrecision, pricepPrecision int32, fcClient *client.FCoinClient, buyLevel, sellLevel, period int, bySide string, db *gorm.DB) *DigService {
+type WsDepth struct {
+	Bids []float64 `json:"bids"`
+	Asks []float64 `json:"asks"`
+	Ts   int64     `json:"ts"`
+	Seq  int       `json:"seq"`
+	Type string    `json:"type"`
+}
+
+func NewDigService(symbol string, balance, minBalance, minAsset decimal.Decimal, assetPrecision, pricepPrecision int32, fcClient *client.FCoinClient, buyLevel, sellLevel, period int, bySide string, db *gorm.DB, depthType string) *DigService {
 	ds := &DigService{
 		symbol:         symbol,
 		balance:        balance,
@@ -44,6 +55,7 @@ func NewDigService(symbol string, balance, minBalance, minAsset decimal.Decimal,
 		bySide:         bySide,
 		orderChan:      make(chan string, 128),
 		db:             db,
+		depthType:      depthType,
 	}
 	return ds
 }
@@ -55,6 +67,22 @@ func handlePanic() {
 }
 
 func (ds *DigService) Run() {
+
+	api := fcoin.Client{}
+	if err := api.InitWS(); err != nil {
+		log.Fatal(err)
+	}
+
+	rsp, err := api.WSPing()
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Debugf("Ping from websocket: %v", rsp)
+
+	if err := api.WSSubscribe("", ds.depthType); err != nil {
+		log.Fatal(err)
+	}
+
 	for {
 
 		err := ds.cancelBuyOrder()
@@ -62,24 +90,23 @@ func (ds *DigService) Run() {
 			log.Error(err)
 		}
 
-		time.Sleep(time.Millisecond * 101)
-
 		err = ds.cancelSellOrder()
 		if err != nil {
 			log.Error(err)
 			continue
 		}
-		time.Sleep(time.Millisecond * 101)
 
-		depth, err := ds.fcClient.GetDepth(ds.symbol, "L20")
+		_, rsp, _ := api.WS.ReadMessage()
+		depth := &WsDepth{}
+		err = json.Unmarshal(rsp, depth)
 		if err != nil {
 			log.Error(err)
 			continue
 		}
 
-		if depth == nil || len(depth.Data.Asks) < 30 || len(depth.Data.Bids) < 30 {
+		if depth == nil || len(depth.Asks) < 30 || len(depth.Bids) < 30 {
 			log.Error("depth data is not enough")
-			return
+			continue
 		}
 
 		time.Sleep(time.Millisecond * 101)
@@ -103,7 +130,7 @@ func (ds *DigService) Run() {
 
 /**
  */
-func (ds *DigService) createBuyOrder(depth *client.Depth) error {
+func (ds *DigService) createBuyOrder(depth *WsDepth) error {
 
 	if ds.buyOrderResult != nil {
 		return nil
@@ -133,8 +160,7 @@ func (ds *DigService) createBuyOrder(depth *client.Depth) error {
 		available = ds.balance
 	}
 
-	log.Debugf("%s,begin to create buy order", ds.symbol)
-	buyPrice := decimal.NewFromFloat(depth.Data.Bids[(ds.buyLevel-1)*2])
+	buyPrice := decimal.NewFromFloat(depth.Bids[(ds.buyLevel-1)*2])
 
 	p := decimal.New(1, ds.assetPrecision)
 
@@ -166,7 +192,7 @@ func (ds *DigService) createBuyOrder(depth *client.Depth) error {
 	return err
 }
 
-func (ds *DigService) createSellOrder(depth *client.Depth) error {
+func (ds *DigService) createSellOrder(depth *WsDepth) error {
 
 	if ds.sellOrderResult != nil {
 		return nil
@@ -187,8 +213,7 @@ func (ds *DigService) createSellOrder(depth *client.Depth) error {
 		return nil
 	}
 
-	log.Debugf("%s,begin to create sell order", ds.symbol)
-	sellPrice := decimal.NewFromFloat(depth.Data.Asks[(ds.sellLevel-1)*2])
+	sellPrice := decimal.NewFromFloat(depth.Asks[(ds.sellLevel-1)*2])
 
 	p := decimal.New(1, ds.assetPrecision)
 
@@ -212,6 +237,8 @@ func (ds *DigService) createSellOrder(depth *client.Depth) error {
 		log.Errorf("%s sell order failed,%v", ds.symbol, res)
 		return err
 	}
+
+	log.Debugf("%s,created sell order,price:%s,amount:%s", ds.symbol, newOrder.Price, newOrder.Amount)
 
 	ds.sellOrderResult = res
 	defer handlePanic()
@@ -268,8 +295,6 @@ func (ds *DigService) cancelSellOrder() error {
 	defer handlePanic()
 	return nil
 }
-
-//btcusdt  btcpax btctusd
 
 func (ds *DigService) SaveOrder() {
 	for {
