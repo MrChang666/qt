@@ -73,19 +73,19 @@ func (ds *DigService) Run() {
 		log.Fatal(err)
 	}
 
-	rsp, err := api.WSPing()
-	if err != nil {
-		log.Fatal(err)
-	}
-	log.Debugf("Ping from websocket: %v", rsp)
-
 	if err := api.WSSubscribe("", ds.depthType); err != nil {
 		log.Fatal(err)
 	}
 
 	for {
 
-		err := ds.cancelBuyOrder()
+		_, err := api.WSPing()
+		if err != nil {
+			log.Error(err)
+			continue
+		}
+
+		err = ds.cancelBuyOrder()
 		if err != nil {
 			log.Error(err)
 		}
@@ -96,7 +96,12 @@ func (ds *DigService) Run() {
 			continue
 		}
 
-		_, rsp, _ := api.WS.ReadMessage()
+		_, rsp, err := api.WS.ReadMessage()
+		if err != nil {
+			log.Errorf("ws ReadMessage failed,%v", err)
+			continue
+		}
+
 		depth := &WsDepth{}
 		err = json.Unmarshal(rsp, depth)
 		if err != nil {
