@@ -10,6 +10,7 @@ import (
 	"github.com/jinzhu/gorm"
 	"github.com/shopspring/decimal"
 	log "github.com/sirupsen/logrus"
+	"strings"
 	"time"
 )
 
@@ -77,15 +78,22 @@ func (ds *DigService) Run() {
 		log.Fatal(err)
 	}
 
+	heartBeatingTime := time.Now()
+
 	for {
 
-		_, err := api.WSPing()
-		if err != nil {
-			log.Error(err)
-			continue
+		if time.Now().Sub(heartBeatingTime) > time.Second*29 {
+
+			resp, err := api.WSPing()
+			if err != nil {
+				log.Error(err)
+				continue
+			}
+			heartBeatingTime = time.Now()
+			log.Infof("heart beating,%v", resp)
 		}
 
-		err = ds.cancelBuyOrder()
+		err := ds.cancelBuyOrder()
 		if err != nil {
 			log.Error(err)
 		}
@@ -99,6 +107,11 @@ func (ds *DigService) Run() {
 		_, rsp, err := api.WS.ReadMessage()
 		if err != nil {
 			log.Errorf("ws ReadMessage failed,%v", err)
+			continue
+		}
+
+		//ping 返回的结果
+		if strings.Contains(string(rsp), "topics") {
 			continue
 		}
 
