@@ -37,7 +37,7 @@ func initLog(logPath, logLevel string) {
 	case "debug":
 		level = log.DebugLevel
 	case "info":
-		level = log.DebugLevel
+		level = log.InfoLevel
 	case "error":
 		level = log.ErrorLevel
 	default:
