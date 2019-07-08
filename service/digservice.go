@@ -1,16 +1,13 @@
 package service
 
 import (
-	"encoding/json"
 	"fmt"
-	"github.com/FCoinCommunity/fcoin-go-sdk/fcoin"
 	"github.com/MrChang666/fcoin-api-go/client"
 	"github.com/MrChang666/qt/model"
 	"github.com/MrChang666/qt/util"
 	"github.com/jinzhu/gorm"
 	"github.com/shopspring/decimal"
 	log "github.com/sirupsen/logrus"
-	"strings"
 	"time"
 )
 
@@ -30,18 +27,9 @@ type DigService struct {
 	bySide          string
 	orderChan       chan string
 	db              *gorm.DB
-	depthType       string
 }
 
-type WsDepth struct {
-	Bids []float64 `json:"bids"`
-	Asks []float64 `json:"asks"`
-	Ts   int64     `json:"ts"`
-	Seq  int       `json:"seq"`
-	Type string    `json:"type"`
-}
-
-func NewDigService(symbol string, balance, minBalance, minAsset decimal.Decimal, assetPrecision, pricepPrecision int32, fcClient *client.FCoinClient, buyLevel, sellLevel, period int, bySide string, db *gorm.DB, depthType string) *DigService {
+func NewDigService(symbol string, balance, minBalance, minAsset decimal.Decimal, assetPrecision, pricepPrecision int32, fcClient *client.FCoinClient, buyLevel, sellLevel, period int, bySide string, db *gorm.DB) *DigService {
 	ds := &DigService{
 		symbol:         symbol,
 		balance:        balance,
@@ -56,7 +44,6 @@ func NewDigService(symbol string, balance, minBalance, minAsset decimal.Decimal,
 		bySide:         bySide,
 		orderChan:      make(chan string, 128),
 		db:             db,
-		depthType:      depthType,
 	}
 	return ds
 }
@@ -69,20 +56,7 @@ func handlePanic() {
 
 func (ds *DigService) Run() {
 
-	api := fcoin.Client{}
-	if err := api.InitWS(); err != nil {
-		log.Fatal(err)
-	}
-
-	if err := api.WSSubscribe("", ds.depthType); err != nil {
-		log.Fatal(err)
-	}
-
-	heartBeatingTime := time.Now()
-
 	for {
-
-		time.Sleep(time.Second * time.Duration(ds.period))
 
 		err := ds.cancelBuyOrder()
 		if err != nil {
@@ -95,36 +69,9 @@ func (ds *DigService) Run() {
 			continue
 		}
 
-		if time.Now().Sub(heartBeatingTime) > time.Second*29 {
+		depth, err := ds.fcClient.GetDepth(ds.symbol, "L20")
 
-			resp, err := api.WSPing()
-			if err != nil {
-				log.Error(err)
-				continue
-			}
-			heartBeatingTime = time.Now()
-			log.Infof("heart beating,%v", resp)
-		}
-
-		_, rsp, err := api.WS.ReadMessage()
-		if err != nil {
-			log.Errorf("ws ReadMessage failed,%v", err)
-			continue
-		}
-
-		//ping 返回的结果
-		if strings.Contains(string(rsp), "topics") {
-			continue
-		}
-
-		depth := &WsDepth{}
-		err = json.Unmarshal(rsp, depth)
-		if err != nil {
-			log.Error(err)
-			continue
-		}
-
-		if depth == nil || len(depth.Asks) < 30 || len(depth.Bids) < 30 {
+		if depth == nil || len(depth.Data.Asks) < 30 || len(depth.Data.Bids) < 30 {
 			log.Error("depth data is not enough")
 			continue
 		}
@@ -142,12 +89,14 @@ func (ds *DigService) Run() {
 			log.Errorf("create buy order failed,%v", err)
 		}
 
+		time.Sleep(time.Second * time.Duration(ds.period))
+
 	}
 }
 
 /**
  */
-func (ds *DigService) createBuyOrder(depth *WsDepth) error {
+func (ds *DigService) createBuyOrder(depth *client.Depth) error {
 
 	if ds.buyOrderResult != nil {
 		return nil
@@ -177,7 +126,7 @@ func (ds *DigService) createBuyOrder(depth *WsDepth) error {
 		available = ds.balance
 	}
 
-	buyPrice := decimal.NewFromFloat(depth.Bids[(ds.buyLevel-1)*2])
+	buyPrice := decimal.NewFromFloat(depth.Data.Bids[(ds.buyLevel-1)*2])
 
 	p := decimal.New(1, ds.assetPrecision)
 
@@ -209,7 +158,7 @@ func (ds *DigService) createBuyOrder(depth *WsDepth) error {
 	return err
 }
 
-func (ds *DigService) createSellOrder(depth *WsDepth) error {
+func (ds *DigService) createSellOrder(depth *client.Depth) error {
 
 	if ds.sellOrderResult != nil {
 		return nil
@@ -230,7 +179,7 @@ func (ds *DigService) createSellOrder(depth *WsDepth) error {
 		return nil
 	}
 
-	sellPrice := decimal.NewFromFloat(depth.Asks[(ds.sellLevel-1)*2])
+	sellPrice := decimal.NewFromFloat(depth.Data.Asks[(ds.sellLevel-1)*2])
 
 	p := decimal.New(1, ds.assetPrecision)
 

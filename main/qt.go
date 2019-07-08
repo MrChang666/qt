@@ -74,8 +74,7 @@ func main() {
 		period, _ := strconv.Atoi(s["period"])
 
 		bySide := s["bySide"]
-		depthType := s["depthType"]
-		ds := service.NewDigService(symbol, balance, minBalance, minAsset, int32(assetPrecision), int32(pricePrecision), fcClient, buyLevel, sellLevel, period, bySide, dbSource, depthType)
+		ds := service.NewDigService(symbol, balance, minBalance, minAsset, int32(assetPrecision), int32(pricePrecision), fcClient, buyLevel, sellLevel, period, bySide, dbSource)
 		go ds.Run()
 		go ds.SaveOrder()
 	}
