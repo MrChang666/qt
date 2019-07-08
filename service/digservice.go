@@ -82,16 +82,7 @@ func (ds *DigService) Run() {
 
 	for {
 
-		if time.Now().Sub(heartBeatingTime) > time.Second*29 {
-
-			resp, err := api.WSPing()
-			if err != nil {
-				log.Error(err)
-				continue
-			}
-			heartBeatingTime = time.Now()
-			log.Infof("heart beating,%v", resp)
-		}
+		time.Sleep(time.Second * time.Duration(ds.period))
 
 		err := ds.cancelBuyOrder()
 		if err != nil {
@@ -102,6 +93,17 @@ func (ds *DigService) Run() {
 		if err != nil {
 			log.Error(err)
 			continue
+		}
+
+		if time.Now().Sub(heartBeatingTime) > time.Second*29 {
+
+			resp, err := api.WSPing()
+			if err != nil {
+				log.Error(err)
+				continue
+			}
+			heartBeatingTime = time.Now()
+			log.Infof("heart beating,%v", resp)
 		}
 
 		_, rsp, err := api.WS.ReadMessage()
@@ -142,7 +144,6 @@ func (ds *DigService) Run() {
 			log.Errorf("create buy order failed,%v", err)
 		}
 
-		time.Sleep(time.Second * time.Duration(ds.period))
 	}
 }
 
