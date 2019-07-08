@@ -129,7 +129,6 @@ func (ds *DigService) Run() {
 			continue
 		}
 
-		time.Sleep(time.Millisecond * 101)
 		//创建卖单
 		err = ds.createSellOrder(depth)
 		if err != nil {
@@ -137,7 +136,6 @@ func (ds *DigService) Run() {
 			continue
 		}
 
-		time.Sleep(time.Millisecond * 101)
 		//创建买单
 		err = ds.createBuyOrder(depth)
 		if err != nil {
@@ -340,7 +338,7 @@ func (ds *DigService) SaveOrder() {
 				log.Errorf("save order %s failed,%v", orderId, err)
 			}
 
-			log.Debugf("save order,%s", moi)
+			log.Infof("save order,%s", moi)
 		}
 		time.Sleep(time.Second * 5)
 	}
