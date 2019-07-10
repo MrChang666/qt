@@ -1,17 +1,20 @@
 package service
 
 import (
+	"encoding/json"
 	"fmt"
+	"github.com/FCoinCommunity/fcoin-go-sdk/fcoin"
 	"github.com/MrChang666/fcoin-api-go/client"
 	"github.com/MrChang666/qt/model"
 	"github.com/MrChang666/qt/util"
 	"github.com/jinzhu/gorm"
 	"github.com/shopspring/decimal"
 	log "github.com/sirupsen/logrus"
+	"strings"
 	"time"
 )
 
-type DigService struct {
+type DigWsService struct {
 	symbol          string          //交易对，如btcusdt
 	balance         decimal.Decimal //允许使用的金额，比如100
 	assetPrecision  int32
@@ -27,10 +30,20 @@ type DigService struct {
 	bySide          string
 	orderChan       chan string
 	db              *gorm.DB
+	depthType       string
+	depthData       []byte
 }
 
-func NewDigService(symbol string, balance, minBalance, minAsset decimal.Decimal, assetPrecision, pricepPrecision int32, fcClient *client.FCoinClient, buyLevel, sellLevel, period int, bySide string, db *gorm.DB) *DigService {
-	ds := &DigService{
+type WsDepth struct {
+	Bids []float64 `json:"bids"`
+	Asks []float64 `json:"asks"`
+	Ts   int64     `json:"ts"`
+	Seq  int       `json:"seq"`
+	Type string    `json:"type"`
+}
+
+func NewDigWsService(symbol string, balance, minBalance, minAsset decimal.Decimal, assetPrecision, pricepPrecision int32, fcClient *client.FCoinClient, buyLevel, sellLevel, period int, bySide string, db *gorm.DB, depthType string) *DigWsService {
+	ds := &DigWsService{
 		symbol:         symbol,
 		balance:        balance,
 		assetPrecision: assetPrecision,
@@ -44,20 +57,14 @@ func NewDigService(symbol string, balance, minBalance, minAsset decimal.Decimal,
 		bySide:         bySide,
 		orderChan:      make(chan string, 128),
 		db:             db,
+		depthType:      depthType,
 	}
 	return ds
 }
 
-func HandlePanic() {
-	if err := recover(); err != nil {
-		log.Error("panic err:", err)
-	}
-}
-
-func (ds *DigService) Run() {
+func (ds *DigWsService) Run() {
 
 	for {
-
 		err := ds.cancelBuyOrder()
 		if err != nil {
 			log.Error(err)
@@ -69,9 +76,25 @@ func (ds *DigService) Run() {
 			continue
 		}
 
-		depth, err := ds.fcClient.GetDepth(ds.symbol, "L20")
+		if len(ds.depthData) == 0 {
+			time.Sleep(time.Second)
+			log.Debugf("depthData is nil")
+			continue
+		}
+		//ping 返回的结果
+		if strings.Contains(string(ds.depthData), "topics") {
+			time.Sleep(time.Second)
+			log.Debugf("ping result")
+			continue
+		}
+		depth := &WsDepth{}
+		err = json.Unmarshal(ds.depthData, depth)
+		if err != nil {
+			log.Error(err)
+			continue
+		}
 
-		if depth == nil || len(depth.Data.Asks) < 30 || len(depth.Data.Bids) < 30 {
+		if depth == nil || len(depth.Asks) < 30 || len(depth.Bids) < 30 {
 			log.Error("depth data is not enough")
 			continue
 		}
@@ -88,15 +111,48 @@ func (ds *DigService) Run() {
 		if err != nil {
 			log.Errorf("create buy order failed,%v", err)
 		}
-
 		time.Sleep(time.Second * time.Duration(ds.period))
+	}
+}
 
+func (ds *DigWsService) RunWs() {
+	api := fcoin.Client{}
+	if err := api.InitWS(); err != nil {
+		log.Fatal(err)
+	}
+
+	if err := api.WSSubscribe("", ds.depthType); err != nil {
+		log.Fatal(err)
+	}
+
+	heartBeatingTime := time.Now()
+
+	for {
+
+		if time.Now().Sub(heartBeatingTime) > time.Second*29 {
+
+			resp, err := api.WSPing()
+			if err != nil {
+				log.Error(err)
+				continue
+			}
+			heartBeatingTime = time.Now()
+			log.Infof("heart beating,%v", resp)
+		}
+
+		_, rsp, err := api.WS.ReadMessage()
+		if err != nil {
+			log.Errorf("ws ReadMessage failed,%v", err)
+			continue
+		}
+
+		ds.depthData = rsp
 	}
 }
 
 /**
  */
-func (ds *DigService) createBuyOrder(depth *client.Depth) error {
+func (ds *DigWsService) createBuyOrder(depth *WsDepth) error {
 
 	if ds.buyOrderResult != nil {
 		return nil
@@ -126,7 +182,7 @@ func (ds *DigService) createBuyOrder(depth *client.Depth) error {
 		available = ds.balance
 	}
 
-	buyPrice := decimal.NewFromFloat(depth.Data.Bids[(ds.buyLevel-1)*2])
+	buyPrice := decimal.NewFromFloat(depth.Bids[(ds.buyLevel-1)*2])
 
 	p := decimal.New(1, ds.assetPrecision)
 
@@ -158,7 +214,7 @@ func (ds *DigService) createBuyOrder(depth *client.Depth) error {
 	return err
 }
 
-func (ds *DigService) createSellOrder(depth *client.Depth) error {
+func (ds *DigWsService) createSellOrder(depth *WsDepth) error {
 
 	if ds.sellOrderResult != nil {
 		return nil
@@ -179,7 +235,7 @@ func (ds *DigService) createSellOrder(depth *client.Depth) error {
 		return nil
 	}
 
-	sellPrice := decimal.NewFromFloat(depth.Data.Asks[(ds.sellLevel-1)*2])
+	sellPrice := decimal.NewFromFloat(depth.Asks[(ds.sellLevel-1)*2])
 
 	p := decimal.New(1, ds.assetPrecision)
 
@@ -211,7 +267,7 @@ func (ds *DigService) createSellOrder(depth *client.Depth) error {
 	return err
 }
 
-func (ds *DigService) cancelBuyOrder() error {
+func (ds *DigWsService) cancelBuyOrder() error {
 	if ds.buyOrderResult == nil {
 		return nil
 	}
@@ -222,6 +278,8 @@ func (ds *DigService) cancelBuyOrder() error {
 	}
 	if res.Status == client.ORDER_STATES_SUCCESS {
 		ds.buyOrderResult = nil
+		log.Debug("cancel buy order success")
+
 	} else if res.Status == client.CANCEL_SUCCESS_ORDER {
 		//记录成交的情况
 		select {
@@ -229,6 +287,8 @@ func (ds *DigService) cancelBuyOrder() error {
 		}
 
 		ds.buyOrderResult = nil
+		log.Debug("cancel buy order success")
+
 	} else { //都是非正常情况
 		return fmt.Errorf("cancel buy order error,%v", res)
 	}
@@ -237,17 +297,17 @@ func (ds *DigService) cancelBuyOrder() error {
 	return nil
 }
 
-func (ds *DigService) cancelSellOrder() error {
+func (ds *DigWsService) cancelSellOrder() error {
 	if ds.sellOrderResult == nil {
 		return nil
 	}
-	log.Debug("begin to cancel sell order")
 	res, err := ds.fcClient.CancelOrder(ds.sellOrderResult.Data)
 	if err != nil {
 		return fmt.Errorf("cancel sell order failed,%v", err)
 	}
 	if res.Status == client.ORDER_STATES_SUCCESS {
 		ds.sellOrderResult = nil
+		log.Debug("cancel sell order success")
 	} else if res.Status == client.CANCEL_SUCCESS_ORDER {
 		//记录成交的情况
 		select {
@@ -255,6 +315,7 @@ func (ds *DigService) cancelSellOrder() error {
 		}
 
 		ds.sellOrderResult = nil
+		log.Debug("cancel sell order success")
 	} else { //都是非正常情况
 		return fmt.Errorf("cancel sell order error,%v", res)
 	}
@@ -262,7 +323,7 @@ func (ds *DigService) cancelSellOrder() error {
 	return nil
 }
 
-func (ds *DigService) SaveOrder() {
+func (ds *DigWsService) SaveOrder() {
 	for {
 		select {
 		case orderId := <-ds.orderChan:

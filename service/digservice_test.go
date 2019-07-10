@@ -15,13 +15,6 @@ func initClient() *client.FCoinClient {
 }
 
 func TestDigService_Run(t *testing.T) {
-	fc := initClient()
-	depth, err := fc.GetDepth("btcusdt", "L20")
-	if err != nil {
-		t.Fatal(err)
-	}
-	fmt.Println(len(depth.Data.Bids))
-	fmt.Println(depth.Data.Bids)
 }
 
 func TestDe(t *testing.T) {

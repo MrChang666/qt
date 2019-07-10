@@ -141,7 +141,7 @@ func (ds *MarketService) createBuyOrder(curPrice decimal.Decimal) error {
 	log.Debugf("%s,created buy order,price:%s,amount:%s", ds.symbol, newOrder.Price, newOrder.Amount)
 
 	ds.buyOrderResult = res
-	defer handlePanic()
+	defer HandlePanic()
 	return err
 }
 
@@ -200,7 +200,7 @@ func (ds *MarketService) createSellOrder(curPrice decimal.Decimal) error {
 	log.Debugf("%s,created sell order,price:%s,amount:%s", ds.symbol, newOrder.Price, newOrder.Amount)
 
 	ds.sellOrderResult = res
-	defer handlePanic()
+	defer HandlePanic()
 	return err
 }
 
@@ -227,7 +227,7 @@ func (ds *MarketService) cancelBuyOrder() {
 		log.Errorf("cancel buy order error,%v", res)
 	}
 
-	defer handlePanic()
+	defer HandlePanic()
 }
 
 func (ds *MarketService) cancelSellOrder() {
@@ -252,7 +252,7 @@ func (ds *MarketService) cancelSellOrder() {
 	} else { //都是非正常情况
 		log.Errorf("cancel sell order error,%v", res)
 	}
-	defer handlePanic()
+	defer HandlePanic()
 }
 
 func (ds *MarketService) SaveOrder() {
