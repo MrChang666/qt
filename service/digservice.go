@@ -136,7 +136,7 @@ func (ds *DigService) createBuyOrder(depth *client.Depth) error {
 		available = ds.balance
 	}
 
-	buyPrice := decimal.NewFromFloat(depth.Data.Bids[(ds.buyLevel-1)*2])
+	buyPrice := decimal.NewFromFloat(depth.Data.Bids[(ds.buyLevel-1)*2]).Round(ds.pricePrecision)
 
 	p := decimal.New(1, ds.assetPrecision)
 
@@ -191,7 +191,7 @@ func (ds *DigService) createSellOrder(depth *client.Depth) error {
 		return nil
 	}
 
-	sellPrice := decimal.NewFromFloat(depth.Data.Asks[(ds.sellLevel-1)*2])
+	sellPrice := decimal.NewFromFloat(depth.Data.Asks[(ds.sellLevel-1)*2]).Round(ds.pricePrecision)
 
 	p := decimal.New(1, ds.assetPrecision)
 
@@ -230,10 +230,10 @@ func (ds *DigService) cancelBuyOrder(depth *client.Depth) error {
 		return nil
 	}
 
-	lowPrice := decimal.NewFromFloat(depth.Data.Asks[(ds.buyHighLevel-1)*2])
-	highPrice := decimal.NewFromFloat(depth.Data.Asks[(ds.buyLowLevel-1)*2])
+	lowPrice := decimal.NewFromFloat(depth.Data.Bids[(ds.buyHighLevel-1)*2])
+	highPrice := decimal.NewFromFloat(depth.Data.Bids[(ds.buyLowLevel-1)*2])
 
-	if lowPrice.GreaterThanOrEqual(ds.sellPrice) || highPrice.LessThanOrEqual(ds.sellPrice) {
+	if lowPrice.GreaterThanOrEqual(ds.buyPrice) || highPrice.LessThanOrEqual(ds.buyPrice) {
 		log.Debug("begin to cancel buy order")
 
 		res, err := ds.fcClient.CancelOrder(ds.buyOrderResult.Data)
@@ -289,6 +289,25 @@ func (ds *DigService) cancelSellOrder(depth *client.Depth) error {
 	return nil
 }
 
+func (ds *DigService) checkOrder() {
+	if ds.sellOrderResult != nil {
+
+		sellOrder, err := ds.fcClient.GetOrderById(ds.sellOrderResult.Data)
+		if err != nil {
+			log.Errorf("check sell order failed,%v", err)
+		}
+
+		if sellOrder.Data.State == client.FILLED || sellOrder.Data.State == client.PARTIAL_FILLED {
+			ds.saveOrderWithInfo(sellOrder)
+			ds.sellOrderResult = nil
+		}
+	}
+
+	if ds.buyOrderResult != nil {
+
+	}
+}
+
 func (ds *DigService) SaveOrder() {
 	for {
 		select {
@@ -297,25 +316,33 @@ func (ds *DigService) SaveOrder() {
 			if err != nil {
 				log.Errorf("check success order failed.%v", err)
 			}
-			amount, _ := decimal.NewFromString(orderInfo.Data.Amount)
-			price, _ := decimal.NewFromString(orderInfo.Data.Price)
-			moi := &model.OrderInfo{
-				Amount:    amount,
-				OrderId:   orderId,
-				OrderType: orderInfo.Data.Type,
-				Price:     price,
-				State:     orderInfo.Data.State,
-				Symbol:    orderInfo.Data.Symbol,
-				Side:      orderInfo.Data.Side,
-			}
-
-			err = moi.Create(ds.db)
+			err = ds.saveOrderWithInfo(orderInfo)
 			if err != nil {
 				log.Errorf("save order %s failed,%v", orderId, err)
 			}
 
-			log.Infof("save order,%s", moi)
 		}
 		time.Sleep(time.Second * 5)
 	}
+}
+
+func (ds *DigService) saveOrderWithInfo(orderInfo *client.OrderInfo) error {
+	amount, _ := decimal.NewFromString(orderInfo.Data.Amount)
+	price, _ := decimal.NewFromString(orderInfo.Data.Price)
+	moi := &model.OrderInfo{
+		Amount:    amount,
+		OrderId:   orderInfo.Data.ID,
+		OrderType: orderInfo.Data.Type,
+		Price:     price,
+		State:     orderInfo.Data.State,
+		Symbol:    orderInfo.Data.Symbol,
+		Side:      orderInfo.Data.Side,
+	}
+
+	err := moi.Create(ds.db)
+
+	if err == nil {
+		log.Infof("save order,%s", moi)
+	}
+	return err
 }

@@ -9,7 +9,6 @@ import (
 	"github.com/natefinch/lumberjack"
 	"github.com/shopspring/decimal"
 	log "github.com/sirupsen/logrus"
-
 	"io"
 	"os"
 	"strconv"
@@ -48,7 +47,8 @@ func initLog(logPath, logLevel string) {
 }
 
 func main() {
-	cfg := config.InitConfig("qt", "qt/config")
+
+	cfg := config.InitConfig("qt", "./config")
 	initLog(cfg.LogPath, cfg.LogLevel)
 	fcClient := client.NewFCoinClient(cfg.SecretKey, cfg.AssKey, cfg.BaseUrl)
 
