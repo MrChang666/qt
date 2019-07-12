@@ -8,15 +8,18 @@ symbols:
   -
     balance: "100"
     assetPrecision: "4"
-    pricePrecision: "4"
-    symbol: "paxusdt"
-    minBalance: "1"
-    minAsset: "1"
-    period: "3"
+    pricePrecision: "3"
+    symbol: "eosusdt"
+    minBalance: "10"
+    minAsset: "0.01"
+    period: "1"
     #1单边交易 2 双边交易
     bySide: "2"
     #1-15 排序挖矿的范围
-    buyLevel: "5"
+    buyLowLevel: "3"
+    buyLevel: "12"
+    buyHighLevel: "16"
     #挂单的范围 1-20
-    sellLevel: "5"
-    depthType: "depth.L20.paxusdt"
+    sellLowLevel: "8"
+    sellLevel: "12"
+    sellHighLevel: "20"

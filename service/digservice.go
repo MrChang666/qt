@@ -27,9 +27,15 @@ type DigService struct {
 	bySide          string
 	orderChan       chan string
 	db              *gorm.DB
+	buyLowLevel     int
+	buyHighLevel    int
+	sellLowLevel    int
+	sellHighLevel   int
+	sellPrice       decimal.Decimal
+	buyPrice        decimal.Decimal
 }
 
-func NewDigService(symbol string, balance, minBalance, minAsset decimal.Decimal, assetPrecision, pricepPrecision int32, fcClient *client.FCoinClient, buyLevel, sellLevel, period int, bySide string, db *gorm.DB) *DigService {
+func NewDigService(symbol string, balance, minBalance, minAsset decimal.Decimal, assetPrecision, pricepPrecision int32, fcClient *client.FCoinClient, buyLevel, sellLevel, period int, bySide string, db *gorm.DB, buyLowLevel, buyHighLevel, sellLowLevel, sellHighLevel int) *DigService {
 	ds := &DigService{
 		symbol:         symbol,
 		balance:        balance,
@@ -44,6 +50,10 @@ func NewDigService(symbol string, balance, minBalance, minAsset decimal.Decimal,
 		bySide:         bySide,
 		orderChan:      make(chan string, 128),
 		db:             db,
+		buyLowLevel:    buyLowLevel,
+		buyHighLevel:   buyHighLevel,
+		sellLowLevel:   sellLowLevel,
+		sellHighLevel:  sellHighLevel,
 	}
 	return ds
 }
@@ -58,21 +68,23 @@ func (ds *DigService) Run() {
 
 	for {
 
-		err := ds.cancelBuyOrder()
-		if err != nil {
-			log.Error(err)
-		}
-
-		err = ds.cancelSellOrder()
-		if err != nil {
-			log.Error(err)
-			continue
-		}
+		time.Sleep(time.Second * time.Duration(ds.period))
 
 		depth, err := ds.fcClient.GetDepth(ds.symbol, "L20")
 
-		if depth == nil || len(depth.Data.Asks) < 30 || len(depth.Data.Bids) < 30 {
+		if depth == nil || len(depth.Data.Asks) < 40 || len(depth.Data.Bids) < 40 {
 			log.Error("depth data is not enough")
+			continue
+		}
+
+		err = ds.cancelBuyOrder(depth)
+		if err != nil {
+			log.Error(err)
+		}
+
+		err = ds.cancelSellOrder(depth)
+		if err != nil {
+			log.Error(err)
 			continue
 		}
 
@@ -88,8 +100,6 @@ func (ds *DigService) Run() {
 		if err != nil {
 			log.Errorf("create buy order failed,%v", err)
 		}
-
-		time.Sleep(time.Second * time.Duration(ds.period))
 
 	}
 }
@@ -154,6 +164,8 @@ func (ds *DigService) createBuyOrder(depth *client.Depth) error {
 	log.Debugf("%s,created buy order,price:%s,amount:%s", ds.symbol, newOrder.Price, newOrder.Amount)
 
 	ds.buyOrderResult = res
+	ds.buyPrice = buyPrice
+
 	defer HandlePanic()
 	return err
 }
@@ -207,57 +219,72 @@ func (ds *DigService) createSellOrder(depth *client.Depth) error {
 	log.Debugf("%s,created sell order,price:%s,amount:%s", ds.symbol, newOrder.Price, newOrder.Amount)
 
 	ds.sellOrderResult = res
+	ds.sellPrice = sellPrice
+
 	defer HandlePanic()
 	return err
 }
 
-func (ds *DigService) cancelBuyOrder() error {
+func (ds *DigService) cancelBuyOrder(depth *client.Depth) error {
 	if ds.buyOrderResult == nil {
 		return nil
 	}
-	log.Debug("begin to cancel buy order")
-	res, err := ds.fcClient.CancelOrder(ds.buyOrderResult.Data)
-	if err != nil {
-		return fmt.Errorf("cancel buy order failed,%v", err)
-	}
-	if res.Status == client.ORDER_STATES_SUCCESS {
-		ds.buyOrderResult = nil
-	} else if res.Status == client.CANCEL_SUCCESS_ORDER {
-		//记录成交的情况
-		select {
-		case ds.orderChan <- ds.buyOrderResult.Data:
+
+	lowPrice := decimal.NewFromFloat(depth.Data.Asks[(ds.buyHighLevel-1)*2])
+	highPrice := decimal.NewFromFloat(depth.Data.Asks[(ds.buyLowLevel-1)*2])
+
+	if lowPrice.GreaterThanOrEqual(ds.sellPrice) || highPrice.LessThanOrEqual(ds.sellPrice) {
+		log.Debug("begin to cancel buy order")
+
+		res, err := ds.fcClient.CancelOrder(ds.buyOrderResult.Data)
+		if err != nil {
+			return fmt.Errorf("cancel buy order failed,%v", err)
 		}
+		if res.Status == client.ORDER_STATES_SUCCESS {
+			ds.buyOrderResult = nil
+		} else if res.Status == client.CANCEL_SUCCESS_ORDER {
+			//记录成交的情况
+			select {
+			case ds.orderChan <- ds.buyOrderResult.Data:
+			}
 
-		ds.buyOrderResult = nil
-	} else { //都是非正常情况
-		return fmt.Errorf("cancel buy order error,%v", res)
+			ds.buyOrderResult = nil
+		} else { //都是非正常情况
+			return fmt.Errorf("cancel buy order error,%v", res)
+		}
 	}
-
 	defer HandlePanic()
 	return nil
 }
 
-func (ds *DigService) cancelSellOrder() error {
+func (ds *DigService) cancelSellOrder(depth *client.Depth) error {
 	if ds.sellOrderResult == nil {
 		return nil
 	}
-	log.Debug("begin to cancel sell order")
-	res, err := ds.fcClient.CancelOrder(ds.sellOrderResult.Data)
-	if err != nil {
-		return fmt.Errorf("cancel sell order failed,%v", err)
-	}
-	if res.Status == client.ORDER_STATES_SUCCESS {
-		ds.sellOrderResult = nil
-	} else if res.Status == client.CANCEL_SUCCESS_ORDER {
-		//记录成交的情况
-		select {
-		case ds.orderChan <- ds.sellOrderResult.Data:
-		}
 
-		ds.sellOrderResult = nil
-	} else { //都是非正常情况
-		return fmt.Errorf("cancel sell order error,%v", res)
+	lowPrice := decimal.NewFromFloat(depth.Data.Asks[(ds.sellLowLevel-1)*2])
+	highPrice := decimal.NewFromFloat(depth.Data.Asks[(ds.sellHighLevel-1)*2])
+
+	if lowPrice.GreaterThanOrEqual(ds.sellPrice) || highPrice.LessThanOrEqual(ds.sellPrice) {
+		log.Debug("begin to cancel sell order")
+		res, err := ds.fcClient.CancelOrder(ds.sellOrderResult.Data)
+		if err != nil {
+			return fmt.Errorf("cancel sell order failed,%v", err)
+		}
+		if res.Status == client.ORDER_STATES_SUCCESS {
+			ds.sellOrderResult = nil
+		} else if res.Status == client.CANCEL_SUCCESS_ORDER {
+			//记录成交的情况
+			select {
+			case ds.orderChan <- ds.sellOrderResult.Data:
+			}
+
+			ds.sellOrderResult = nil
+		} else { //都是非正常情况
+			return fmt.Errorf("cancel sell order error,%v", res)
+		}
 	}
+
 	defer HandlePanic()
 	return nil
 }
