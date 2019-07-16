@@ -68,7 +68,7 @@ func (ds *DigService) Run() {
 
 	for {
 
-		time.Sleep(time.Second * time.Duration(ds.period))
+		time.Sleep(time.Millisecond * time.Duration(1000*ds.period))
 
 		depth, err := ds.fcClient.GetDepth(ds.symbol, "L20")
 
@@ -289,7 +289,8 @@ func (ds *DigService) cancelSellOrder(depth *client.Depth) error {
 	return nil
 }
 
-func (ds *DigService) checkOrder() {
+func (ds *DigService) CheckOrder() {
+
 	if ds.sellOrderResult != nil {
 
 		sellOrder, err := ds.fcClient.GetOrderById(ds.sellOrderResult.Data)
@@ -304,7 +305,15 @@ func (ds *DigService) checkOrder() {
 	}
 
 	if ds.buyOrderResult != nil {
+		buyOrder, err := ds.fcClient.GetOrderById(ds.buyOrderResult.Data)
+		if err != nil {
+			log.Errorf("check sell order failed,%v", err)
+		}
 
+		if buyOrder.Data.State == client.FILLED || buyOrder.Data.State == client.PARTIAL_FILLED {
+			ds.saveOrderWithInfo(buyOrder)
+			ds.buyOrderResult = nil
+		}
 	}
 }
 
