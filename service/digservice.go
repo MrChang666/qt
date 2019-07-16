@@ -195,7 +195,11 @@ func (ds *DigService) createSellOrder(depth *client.Depth) error {
 
 	p := decimal.New(1, ds.assetPrecision)
 
-	assetAmt := available
+	assetAmt := ds.balance.Div(sellPrice)
+	if assetAmt.GreaterThan(available) {
+		assetAmt = available
+	}
+
 	assetAmt = assetAmt.Mul(p).Floor().Div(p)
 	//构建订单
 	newOrder := &client.NewOrder{
@@ -331,7 +335,7 @@ func (ds *DigService) SaveOrder() {
 			}
 
 		}
-		time.Sleep(time.Second * 5)
+		time.Sleep(time.Second * 1)
 	}
 }
 
