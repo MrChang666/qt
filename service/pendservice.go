@@ -116,7 +116,7 @@ func (ps *PendService) createBuyOrder(curPrice decimal.Decimal) error {
 		available = ps.balance
 	}
 
-	buyPrice := curPrice.Mul(one.Sub(ps.maxRate))
+	buyPrice := curPrice.Mul(one.Sub(ps.maxRate)).Round(ps.pricePrecision)
 
 	p := decimal.New(1, ps.assetPrecision)
 
