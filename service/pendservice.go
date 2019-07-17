@@ -95,7 +95,6 @@ func (ps *PendService) createBuyOrder(curPrice decimal.Decimal) error {
 	}
 
 	if ps.bySide == "1" && ps.sellOrderResult != nil {
-		log.Infof("%s,one side trade", ps.symbol)
 		return nil
 	}
 
