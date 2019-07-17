@@ -1,9 +1,9 @@
 logPath: ./logs/qt.log
 logLevel: debug
 baseUrl: "https://api.fcoin.com/v2"
-assKey: ""
-secretKey: ""
-dsn: ""
+assKey: "7166e749158b4c688915832312b8f7b2"
+secretKey: "5d5141acf57a4ee787c2e063af0d5187"
+dsn: "qt:qt#1024@tcp(47.56.0.186:3306)/qt?charset=utf8&parseTime=True&loc=Local"
 symbols:
   -
     balance: "100"
@@ -20,6 +20,6 @@ symbols:
     buyLevel: "12"
     buyHighLevel: "16"
     #挂单的范围 1-20
-    sellLowLevel: "8"
-    sellLevel: "12"
+    sellLowLevel: "10"
+    sellLevel: "16"
     sellHighLevel: "20"
