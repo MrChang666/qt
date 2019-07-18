@@ -67,7 +67,7 @@ func main() {
 
 		bySide := s["bySide"]
 		ps := service.NewPendService(symbol, balance, midRate, maxRate, minRate, minAsset, int32(assetPrecision), int32(pricePrecision), fcClient, period, bySide)
-		ps.Run()
+		go ps.Run()
 	}
 
 	<-start
