@@ -127,11 +127,6 @@ func (ds *DigService) createBuyOrder(depth *client.Depth) error {
 		return fmt.Errorf("get available failed,%v", err)
 	}
 
-	//如果available小于minBalance，直接返回
-	if available.LessThan(ds.minBalance) {
-		return nil
-	}
-
 	if available.GreaterThan(ds.balance) {
 		available = ds.balance
 	}
@@ -142,6 +137,11 @@ func (ds *DigService) createBuyOrder(depth *client.Depth) error {
 
 	assetAmt := available.Div(buyPrice)
 	assetAmt = assetAmt.Mul(p).Floor().Div(p)
+
+	if assetAmt.LessThan(ds.minAsset) {
+		return nil
+	}
+
 	//构建买单
 	newOrder := &client.NewOrder{
 		Amount:    assetAmt.String(),
