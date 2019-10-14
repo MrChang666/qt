@@ -27,6 +27,30 @@
 			"revisionTime": "2019-04-10T03:04:54Z"
 		},
 		{
+			"checksumSHA1": "Hhj92FmVKe16a3OzcenxumIXybc=",
+			"path": "github.com/gobuffalo/envy",
+			"revision": "043cb4b8af871b49563291e32c66bb84378a60ac",
+			"revisionTime": "2019-04-16T16:09:29Z"
+		},
+		{
+			"checksumSHA1": "JPq8HXZ3slwc3OzQmPNw0o1I5hw=",
+			"path": "github.com/gobuffalo/packd",
+			"revision": "54ea459691466cfb630ccc276723fe3963f3e9d5",
+			"revisionTime": "2019-06-24T18:08:23Z"
+		},
+		{
+			"checksumSHA1": "0ISVV0dxn0dEiOCKcMOVsX/a3/s=",
+			"path": "github.com/gobuffalo/packd/internal/takeon/github.com/markbates/errx",
+			"revision": "54ea459691466cfb630ccc276723fe3963f3e9d5",
+			"revisionTime": "2019-06-24T18:08:23Z"
+		},
+		{
+			"checksumSHA1": "xhGJoeBwBAW9UqcpaGbPml6oh8I=",
+			"path": "github.com/gobuffalo/packr",
+			"revision": "dc520c910ea91354b3ae131bbb029270e4fc1af4",
+			"revisionTime": "2019-07-08T18:37:03Z"
+		},
+		{
 			"checksumSHA1": "hoilQzrHNOxF5Tc6ctXNTDpv4ck=",
 			"path": "github.com/gorilla/websocket",
 			"revision": "ae1634f6a98965ded3b8789c626cb4e0bd78c3de",
@@ -111,6 +135,12 @@
 			"revisionTime": "2018-03-08T03:36:59Z"
 		},
 		{
+			"checksumSHA1": "wwEGs3bPrm/zZT0o9gkQ3cJsNu8=",
+			"path": "github.com/joho/godotenv",
+			"revision": "5c0e6c6ab1a0a9ef0a8822cba3a05d62f7dad941",
+			"revisionTime": "2019-02-04T04:41:09Z"
+		},
+		{
 			"checksumSHA1": "WQTi/XNmYeD6uGrXtaqJ3ibW0wU=",
 			"path": "github.com/konsorten/go-windows-terminal-sequences",
 			"revision": "f55edac94c9bbba5d6182a4be46d86a2c9b5b50e",
@@ -139,6 +169,24 @@
 			"path": "github.com/pelletier/go-toml",
 			"revision": "dba45d427ff48cfb9bcf633db3a8e43b7364e261",
 			"revisionTime": "2019-05-30T03:55:49Z"
+		},
+		{
+			"checksumSHA1": "DJYgNb0a6KOnjF5oTTv6/MthlJc=",
+			"path": "github.com/rogpeppe/go-internal/modfile",
+			"revision": "6f68bf1e81f8552c7dbd47f3bc4371c2db0941a6",
+			"revisionTime": "2019-05-17T14:37:49Z"
+		},
+		{
+			"checksumSHA1": "ifzHrfsouyyU1aki9zSETFwMHqE=",
+			"path": "github.com/rogpeppe/go-internal/module",
+			"revision": "6f68bf1e81f8552c7dbd47f3bc4371c2db0941a6",
+			"revisionTime": "2019-05-17T14:37:49Z"
+		},
+		{
+			"checksumSHA1": "Uqh8Y4U7Bgbv6R02o/rCXW5Uijs=",
+			"path": "github.com/rogpeppe/go-internal/semver",
+			"revision": "6f68bf1e81f8552c7dbd47f3bc4371c2db0941a6",
+			"revisionTime": "2019-05-17T14:37:49Z"
 		},
 		{
 			"checksumSHA1": "etcUdlsnZXEYrw5vs6/tH6E37Wo=",

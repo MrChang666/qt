@@ -113,7 +113,6 @@ func (ds *DigService) createBuyOrder(depth *client.Depth) error {
 	}
 
 	if ds.bySide == "1" && ds.sellOrderResult != nil {
-		log.Infof("%s,one side trade", ds.symbol)
 		return nil
 	}
 
